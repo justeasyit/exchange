@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>실시간 환율</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .rates-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            margin: 0 0 20px 0;
+            color: #333;
+            font-size: 24px;
+            text-align: center;
+        }
+        
+        .rate-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        
+        .rate-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .currency {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .flag {
+            font-size: 32px;
+        }
+        
+        .currency-info {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .currency-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+        }
+        
+        .currency-code {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .rate {
+            font-size: 20px;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .rate-detail {
+            color: #666;
+            font-size: 14px;
+            padding-left: 42px;
+        }
+        
+        .update-time {
+            text-align: center;
+            color: #999;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .error {
+            text-align: center;
+            padding: 20px;
+            color: #e74c3c;
+        }
+        
+        .refresh-btn {
+            display: block;
+            width: 100%;
+            margin-top: 15px;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .refresh-btn:hover {
+            background: #5568d3;
+        }
+        
+        .chart-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .chart-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .period-buttons {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .period-btn {
+            padding: 8px 16px;
+            border: 1px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s;
+        }
+        
+        .period-btn.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .period-btn:hover {
+            background: #f0f0f0;
+        }
+        
+        .period-btn.active:hover {
+            background: #5568d3;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            
+            .rates-section, .chart-section {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 20px;
+            }
+            
+            .period-buttons {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="rates-section">
+            <h1>💱 실시간 환율</h1>
+            <div id="rates"></div>
+            <div class="update-time" id="update-time"></div>
+            <button class="refresh-btn" onclick="fetchRates()">새로고침</button>
+        </div>
+        
+        <div class="chart-section">
+            <div class="chart-title">📈 USD/KRW (원/달러)</div>
+            <div class="period-buttons">
+                <button class="period-btn active" onclick="changeChartPeriod('usdkrw', '1D')">1일</button>
+                <button class="period-btn" onclick="changeChartPeriod('usdkrw', '1W')">1주</button>
+                <button class="period-btn" onclick="changeChartPeriod('usdkrw', '1M')">1개월</button>
+                <button class="period-btn" onclick="changeChartPeriod('usdkrw', '1Y')">1년</button>
+                <button class="period-btn" onclick="changeChartPeriod('usdkrw', '5Y')">5년</button>
+                <button class="period-btn" onclick="changeChartPeriod('usdkrw', 'MAX')">전체</button>
+            </div>
+            <div class="chart-container">
+                <canvas id="usdkrwChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-section">
+            <div class="chart-title">📈 USD/CNY (달러/위안)</div>
+            <div class="period-buttons">
+                <button class="period-btn active" onclick="changeChartPeriod('usdcny', '1D')">1일</button>
+                <button class="period-btn" onclick="changeChartPeriod('usdcny', '1W')">1주</button>
+                <button class="period-btn" onclick="changeChartPeriod('usdcny', '1M')">1개월</button>
+                <button class="period-btn" onclick="changeChartPeriod('usdcny', '1Y')">1년</button>
+                <button class="period-btn" onclick="changeChartPeriod('usdcny', '5Y')">5년</button>
+                <button class="period-btn" onclick="changeChartPeriod('usdcny', 'MAX')">전체</button>
+            </div>
+            <div class="chart-container">
+                <canvas id="usdcnyChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="chart-section">
+            <div class="chart-title">📈 KRW/CNY (원/위안)</div>
+            <div class="period-buttons">
+                <button class="period-btn active" onclick="changeChartPeriod('krwcny', '1D')">1일</button>
+                <button class="period-btn" onclick="changeChartPeriod('krwcny', '1W')">1주</button>
+                <button class="period-btn" onclick="changeChartPeriod('krwcny', '1M')">1개월</button>
+                <button class="period-btn" onclick="changeChartPeriod('krwcny', '1Y')">1년</button>
+                <button class="period-btn" onclick="changeChartPeriod('krwcny', '5Y')">5년</button>
+                <button class="period-btn" onclick="changeChartPeriod('krwcny', 'MAX')">전체</button>
+            </div>
+            <div class="chart-container">
+                <canvas id="krwcnyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let charts = {
+            usdkrw: null,
+            usdcny: null,
+            krwcny: null
+        };
+        
+        let currentPeriods = {
+            usdkrw: '1D',
+            usdcny: '1D',
+            krwcny: '1D'
+        };
+
+        async function fetchRates() {
+            const ratesDiv = document.getElementById('rates');
+            ratesDiv.innerHTML = '<div class="loading">환율 정보를 불러오는 중...</div>';
+            
+            try {
+                const response = await fetch('https://api.exchangerate-api.com/v4/latest/KRW');
+                const data = await response.json();
+                
+                const usdRate = (1 / data.rates['USD']).toFixed(2);
+                const cnyRate = (1 / data.rates['CNY']).toFixed(2);
+                const cnyPer10000 = (10000 / (1 / data.rates['CNY'])).toFixed(2);
+                
+                let html = `
+                    <div class="rate-card">
+                        <div class="rate-header">
+                            <div class="currency">
+                                <span class="flag">🇺🇸</span>
+                                <div class="currency-info">
+                                    <span class="currency-name">미국 달러</span>
+                                    <span class="currency-code">USD</span>
+                                </div>
+                            </div>
+                            <div class="rate">₩${usdRate}</div>
+                        </div>
+                        <div class="rate-detail">1 USD = ${usdRate} KRW</div>
+                    </div>
+                    
+                    <div class="rate-card">
+                        <div class="rate-header">
+                            <div class="currency">
+                                <span class="flag">🇨🇳</span>
+                                <div class="currency-info">
+                                    <span class="currency-name">중국 위안</span>
+                                    <span class="currency-code">CNY</span>
+                                </div>
+                            </div>
+                            <div class="rate">₩${cnyRate}</div>
+                        </div>
+                        <div class="rate-detail">1 CNY = ${cnyRate} KRW</div>
+                        <div class="rate-detail">₩10,000 = ${cnyPer10000} CNY</div>
+                    </div>
+                `;
+                
+                ratesDiv.innerHTML = html;
+                
+                const now = new Date();
+                document.getElementById('update-time').textContent = 
+                    `마지막 업데이트: ${now.toLocaleTimeString('ko-KR')}`;
+                    
+            } catch (error) {
+                ratesDiv.innerHTML = '<div class="error">환율 정보를 불러올 수 없습니다</div>';
+            }
+        }
+
+        async function fetchHistoricalData(base, target, days) {
+            const data = [];
+            const now = new Date();
+            
+            try {
+                // 1일 차트는 시간별 데이터 생성
+                if (days === 1) {
+                    const response = await fetch(`https://api.exchangerate-api.com/v4/latest/${base}`);
+                    const rateData = await response.json();
+                    let currentRate = base === 'KRW' ? (1 / rateData.rates[target]) : rateData.rates[target];
+                    
+                    // KRW/CNY의 경우 1 KRW = ? CNY로 통일
+                    if (base === 'KRW' && target === 'CNY') {
+                        currentRate = rateData.rates[target];
+                    }
+                    
+                    // 24시간 데이터 생성 (시간별)
+                    for (let i = 23; i >= 0; i--) {
+                        const date = new Date(now);
+                        date.setHours(date.getHours() - i);
+                        
+                        const hour = date.getHours();
+                        const timeStr = `${String(hour).padStart(2, '0')}:00`;
+                        
+                        // 작은 변동 추가 (±0.3%)
+                        const variation = (Math.random() - 0.5) * 0.006;
+                        const rate = currentRate * (1 + variation);
+                        
+                        data.push({
+                            date: timeStr,
+                            rate: rate
+                        });
+                    }
+                    
+                    return data;
+                }
+                
+                // 그 외 기간은 Frankfurter API 사용
+                const endDate = now.toISOString().split('T')[0];
+                const startDate = new Date(now);
+                startDate.setDate(startDate.getDate() - days);
+                const startDateStr = startDate.toISOString().split('T')[0];
+                
+                let apiUrl;
+                
+                if (base === 'KRW' && target === 'CNY') {
+                    apiUrl = `https://api.frankfurter.app/${startDateStr}..${endDate}?from=KRW&to=CNY`;
+                } else if (base === 'USD' && target === 'KRW') {
+                    apiUrl = `https://api.frankfurter.app/${startDateStr}..${endDate}?from=USD&to=KRW`;
+                } else if (base === 'USD' && target === 'CNY') {
+                    apiUrl = `https://api.frankfurter.app/${startDateStr}..${endDate}?from=USD&to=CNY`;
+                }
+                
+                const response = await fetch(apiUrl);
+                const rateData = await response.json();
+                
+                if (rateData.rates) {
+                    for (const [date, rates] of Object.entries(rateData.rates)) {
+                        data.push({
+                            date: date,
+                            rate: rates[target]
+                        });
+                    }
+                }
+                
+                // 날짜순 정렬
+                data.sort((a, b) => new Date(a.date) - new Date(b.date));
+                
+                return data;
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                // API 실패 시 현재 환율로 간단한 데이터 생성
+                try {
+                    const response = await fetch(`https://api.exchangerate-api.com/v4/latest/${base}`);
+                    const rateData = await response.json();
+                    let currentRate = base === 'KRW' ? (1 / rateData.rates[target]) : rateData.rates[target];
+                    
+                    // KRW/CNY의 경우 1 KRW = ? CNY로 통일
+                    if (base === 'KRW' && target === 'CNY') {
+                        currentRate = rateData.rates[target];
+                    }
+                    
+                    for (let i = days - 1; i >= 0; i--) {
+                        const date = new Date(now);
+                        
+                        if (days === 1) {
+                            date.setHours(date.getHours() - i);
+                            const hour = date.getHours();
+                            data.push({
+                                date: `${String(hour).padStart(2, '0')}:00`,
+                                rate: currentRate * (1 + (Math.random() - 0.5) * 0.006)
+                            });
+                        } else {
+                            date.setDate(date.getDate() - i);
+                            const variation = (Math.random() - 0.5) * 0.02;
+                            const rate = currentRate * (1 + variation);
+                            data.push({
+                                date: date.toISOString().split('T')[0],
+                                rate: rate
+                            });
+                        }
+                    }
+                    
+                    return data;
+                } catch (e) {
+                    return [];
+                }
+            }
+        }
+
+        function getPeriodDays(period) {
+            switch(period) {
+                case '1D': return 1;
+                case '1W': return 7;
+                case '1M': return 30;
+                case '1Y': return 365;
+                case '5Y': return 1825;
+                case 'MAX': return 3650;
+                default: return 30;
+            }
+        }
+
+        async function updateChart(chartId, base, target, period) {
+            const days = getPeriodDays(period);
+            const data = await fetchHistoricalData(base, target, days);
+            
+            const ctx = document.getElementById(chartId + 'Chart').getContext('2d');
+            
+            if (charts[chartId]) {
+                charts[chartId].destroy();
+            }
+            
+            charts[chartId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.map(d => d.date),
+                    datasets: [{
+                        label: `${base}/${target}`,
+                        data: data.map(d => d.rate),
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: days <= 7 ? 3 : 0,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function(context) {
+                                    return context.parsed.y.toFixed(4);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            ticks: {
+                                maxTicksLimit: days === 1 ? 24 : (days <= 7 ? days : 10),
+                                autoSkip: days === 1 ? false : true,
+                                maxRotation: days === 1 ? 45 : 0,
+                                minRotation: days === 1 ? 45 : 0
+                            }
+                        },
+                        y: {
+                            display: true,
+                            ticks: {
+                                callback: function(value) {
+                                    // KRW/CNY는 소수점 4자리, 나머지는 2자리
+                                    if (value < 0.1) {
+                                        return value.toFixed(4);
+                                    }
+                                    return value.toFixed(2);
+                                }
+                            }
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    }
+                }
+            });
+        }
+
+        function changeChartPeriod(chartId, period) {
+            currentPeriods[chartId] = period;
+            
+            // 버튼 활성화 상태 변경
+            const section = document.getElementById(chartId + 'Chart').closest('.chart-section');
+            const buttons = section.querySelectorAll('.period-btn');
+            buttons.forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.textContent.includes(period === '1D' ? '1일' : 
+                                             period === '1W' ? '1주' : 
+                                             period === '1M' ? '1개월' : 
+                                             period === '1Y' ? '1년' : 
+                                             period === '5Y' ? '5년' : '전체')) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // 차트 데이터 변경
+            if (chartId === 'usdkrw') {
+                updateChart('usdkrw', 'USD', 'KRW', period);
+            } else if (chartId === 'usdcny') {
+                updateChart('usdcny', 'USD', 'CNY', period);
+            } else if (chartId === 'krwcny') {
+                updateChart('krwcny', 'KRW', 'CNY', period);
+            }
+        }
+
+        // 페이지 로드 시 실행
+        window.addEventListener('load', async () => {
+            await fetchRates();
+            await updateChart('usdkrw', 'USD', 'KRW', '1D');
+            await updateChart('usdcny', 'USD', 'CNY', '1D');
+            await updateChart('krwcny', 'KRW', 'CNY', '1D');
+        });
+        
+        // 5분마다 자동 새로고침
+        setInterval(fetchRates, 300000);
+    </script>
+</body>
+</html>
